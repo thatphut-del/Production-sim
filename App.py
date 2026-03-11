@@ -1,52 +1,67 @@
 import streamlit as st
-from streamlit_flow import StreamlitFlow
-from streamlit_flow.elements import StreamlitFlowNode, StreamlitFlowEdge
-import uuid
+import pandas as pd
+import time
 
-st.set_page_config(page_title="Sơ đồ Dòng chảy", layout="wide")
+st.set_page_config(page_title="Quản lý Dòng chảy Sản xuất", layout="wide")
 
 # Khởi tạo dữ liệu
-if 'nodes' not in st.session_state:
-    st.session_state.nodes = [
-        StreamlitFlowNode(id='input', pos=(50, 200), data={'content': 'Đầu vào'}, node_type='input', source_position='right'),
-        StreamlitFlowNode(id='output', pos=(600, 200), data={'content': 'Đầu ra'}, node_type='output', target_position='left')
-    ]
-if 'edges' not in st.session_state:
-    st.session_state.edges = []
+if 'processes' not in st.session_state:
+    st.session_state.processes = {
+        'input': {'name': 'Đầu vào', 'time': 0, 'next': 'P1', 'wip': 0},
+        'P1': {'name': 'Công đoạn 1', 'time': 5, 'next': 'output', 'wip': 0},
+        'output': {'name': 'Đầu ra', 'time': 0, 'next': None, 'wip': 0}
+    }
+if 'total_out' not in st.session_state:
+    st.session_state.total_out = 0
 
-st.title("🏭 Thiết kế Quy trình Kéo thả")
+st.title("🏭 Sơ đồ Dòng chảy & Mô phỏng Sản xuất")
 
+# --- KHU VỰC THIẾT KẾ (Sidebar) ---
 with st.sidebar:
-    st.header("Thêm Công đoạn")
-    name = st.text_input("Tên công đoạn", "Máy 1")
-    t = st.number_input("Thời gian (s)", 1, 100, 5)
-    
-    if st.button("➕ Thêm vào sơ đồ"):
-        new_id = f"node_{uuid.uuid4().hex[:4]}"
-        new_node = StreamlitFlowNode(new_id, (300, 250), {'content': f"{name} ({t}s)"}, 'default', 'right', 'left')
-        st.session_state.nodes.append(new_node)
+    st.header("🛠️ Thiết kế quy trình")
+    with st.expander("Thêm công đoạn mới"):
+        new_id = st.text_input("Mã công đoạn (vd: P2)", "P2")
+        new_name = st.text_input("Tên hiển thị", "Kiểm hàng")
+        new_time = st.number_input("Thời gian (s)", 1, 100, 5)
+        new_next = st.selectbox("Chuyển đến công đoạn:", list(st.session_state.processes.keys()))
+        
+        if st.button("Thêm vào sơ đồ"):
+            st.session_state.processes[new_id] = {
+                'name': new_name, 'time': new_time, 'next': new_next, 'wip': 0
+            }
+            st.rerun()
+
+    if st.button("🗑️ Làm mới sơ đồ"):
+        st.session_state.processes = {
+            'input': {'name': 'Đầu vào', 'time': 0, 'next': 'output', 'wip': 0},
+            'output': {'name': 'Đầu ra', 'time': 0, 'next': None, 'wip': 0}
+        }
         st.rerun()
 
-    if st.button("🗑️ Xóa hết"):
-        st.session_state.nodes = [
-            StreamlitFlowNode('input', (50, 200), {'content': 'Đầu vào'}, 'input', 'right'),
-            StreamlitFlowNode('output', (600, 200), {'content': 'Đầu ra'}, 'output', 'left')
-        ]
-        st.session_state.edges = []
-        st.rerun()
+# --- KHU VỰC HIỂN THỊ SƠ ĐỒ ---
+st.subheader("📍 Dòng chảy hiện tại")
+cols = st.columns(len(st.session_state.processes))
 
-# Hiển thị Canvas
-# Lưu ý: Chữ 'StreamlitFlow' viết hoa S và F
-result = StreamlitFlow(
-    key='flow_designer',
-    nodes=st.session_state.nodes,
-    edges=st.session_state.edges,
-    enable_node_menu=True,
-    enable_edge_menu=True,
-    fit_view=True,
-    height=500
-)
+# Vẽ sơ đồ bằng Markdown & CSS đơn giản để không bao giờ lỗi
+flow_md = " -> ".join([f"**[{p['name']}]**" for p in st.session_state.processes.values()])
+st.markdown(f"**Hướng dòng chảy:** {flow_md}")
 
-# Cập nhật state
-if result:
-    st.session_state.nodes, st.session_state.edges = result.nodes, result.edges
+for i, (p_id, p_data) in enumerate(st.session_state.processes.items()):
+    with cols[i]:
+        st.info(f"**{p_data['name']}**")
+        st.write(f"⏱️ {p_data['time']}s")
+        st.write(f"🔴 WIP: {p_data['wip']}")
+        
+        if st.button(f"Xong {p_id}", key=f"btn_{p_id}"):
+            if p_id == 'input':
+                st.session_state.processes[p_id]['wip'] += 1
+            elif st.session_state.processes[p_id]['wip'] > 0:
+                st.session_state.processes[p_id]['wip'] -= 1
+                next_p = p_data['next']
+                if next_p in st.session_state.processes:
+                    st.session_state.processes[next_p]['wip'] += 1
+                if p_id == 'output':
+                    st.session_state.total_out += 1
+
+st.divider()
+st.metric("Tổng sản phẩm hoàn thành", st.session_state.total_out)
