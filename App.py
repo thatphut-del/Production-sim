@@ -1,15 +1,15 @@
 import streamlit as st
-from streamlit_flow import streamlit_flow
+from streamlit_flow import StreamlitFlow
 from streamlit_flow.elements import StreamlitFlowNode, StreamlitFlowEdge
 import uuid
 
 st.set_page_config(page_title="Sơ đồ Dòng chảy", layout="wide")
 
-# Khởi tạo dữ liệu trong session_state nếu chưa có
+# Khởi tạo dữ liệu
 if 'nodes' not in st.session_state:
     st.session_state.nodes = [
-        StreamlitFlowNode("input", (50, 200), {'content': 'Đầu vào'}, 'input', 'right'),
-        StreamlitFlowNode("output", (600, 200), {'content': 'Đầu ra'}, 'output', 'left')
+        StreamlitFlowNode(id='input', pos=(50, 200), data={'content': 'Đầu vào'}, node_type='input', source_position='right'),
+        StreamlitFlowNode(id='output', pos=(600, 200), data={'content': 'Đầu ra'}, node_type='output', target_position='left')
     ]
 if 'edges' not in st.session_state:
     st.session_state.edges = []
@@ -23,32 +23,30 @@ with st.sidebar:
     
     if st.button("➕ Thêm vào sơ đồ"):
         new_id = f"node_{uuid.uuid4().hex[:4]}"
-        new_node = StreamlitFlowNode(new_id, (300, 250), {'content': f"{name} ({t}s)"}, 'default', 'both')
+        new_node = StreamlitFlowNode(new_id, (300, 250), {'content': f"{name} ({t}s)"}, 'default', 'right', 'left')
         st.session_state.nodes.append(new_node)
         st.rerun()
 
     if st.button("🗑️ Xóa hết"):
         st.session_state.nodes = [
-            StreamlitFlowNode("input", (50, 200), {'content': 'Đầu vào'}, 'input', 'right'),
-            StreamlitFlowNode("output", (600, 200), {'content': 'Đầu ra'}, 'output', 'left')
+            StreamlitFlowNode('input', (50, 200), {'content': 'Đầu vào'}, 'input', 'right'),
+            StreamlitFlowNode('output', (600, 200), {'content': 'Đầu ra'}, 'output', 'left')
         ]
         st.session_state.edges = []
         st.rerun()
 
-# Giao diện kéo thả
-st.info("💡 Cách nối: Kéo từ chấm tròn của khối này sang khối kia để tạo mũi tên.")
-
-# Gọi component và bắt sự kiện thay đổi
-result = streamlit_flow(
-    'flow_designer',
-    st.session_state.nodes,
-    st.session_state.edges,
+# Hiển thị Canvas
+# Lưu ý: Chữ 'StreamlitFlow' viết hoa S và F
+result = StreamlitFlow(
+    key='flow_designer',
+    nodes=st.session_state.nodes,
+    edges=st.session_state.edges,
     enable_node_menu=True,
     enable_edge_menu=True,
     fit_view=True,
     height=500
 )
 
-# Quan trọng: Cập nhật lại state khi người dùng thao tác trên canvas
+# Cập nhật state
 if result:
-    st.session_state.nodes, st.session_state.edges = result
+    st.session_state.nodes, st.session_state.edges = result.nodes, result.edges
