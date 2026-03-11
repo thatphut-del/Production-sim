@@ -1,2 +1,2 @@
 streamlit
-streamlit-flow==0.1.0
+streamlit-flow==1.4.0
