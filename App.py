@@ -1,67 +1,66 @@
 import streamlit as st
-import pandas as pd
-import time
+from streamlit_flow import StreamlitFlow
+from streamlit_flow.elements import StreamlitFlowNode, StreamlitFlowEdge
+import uuid
 
-st.set_page_config(page_title="Quản lý Dòng chảy Sản xuất", layout="wide")
+st.set_page_config(page_title="CT Block Workflow Studio", layout="wide")
 
-# Khởi tạo dữ liệu
-if 'processes' not in st.session_state:
-    st.session_state.processes = {
-        'input': {'name': 'Đầu vào', 'time': 0, 'next': 'P1', 'wip': 0},
-        'P1': {'name': 'Công đoạn 1', 'time': 5, 'next': 'output', 'wip': 0},
-        'output': {'name': 'Đầu ra', 'time': 0, 'next': None, 'wip': 0}
-    }
-if 'total_out' not in st.session_state:
-    st.session_state.total_out = 0
+# --- KHỞI TẠO DỮ LIỆU ---
+if 'nodes' not in st.session_state:
+    st.session_state.nodes = [
+        StreamlitFlowNode('start', (50, 200), {'content': '🚀 Load Material'}, 'input', 'right'),
+        StreamlitFlowNode('end', (800, 200), {'content': '🏁 Finished'}, 'output', 'left')
+    ]
+if 'edges' not in st.session_state:
+    st.session_state.edges = []
 
-st.title("🏭 Sơ đồ Dòng chảy & Mô phỏng Sản xuất")
+# --- GIAO DIỆN CHÍNH ---
+st.title("🏗️ CT Block Workflow Studio")
+st.caption("Xây dựng quy trình sản xuất bằng kéo-thả block và kết nối luồng.")
 
-# --- KHU VỰC THIẾT KẾ (Sidebar) ---
-with st.sidebar:
-    st.header("🛠️ Thiết kế quy trình")
-    with st.expander("Thêm công đoạn mới"):
-        new_id = st.text_input("Mã công đoạn (vd: P2)", "P2")
-        new_name = st.text_input("Tên hiển thị", "Kiểm hàng")
-        new_time = st.number_input("Thời gian (s)", 1, 100, 5)
-        new_next = st.selectbox("Chuyển đến công đoạn:", list(st.session_state.processes.keys()))
+col_tools, col_canvas = st.columns([1, 3])
+
+# --- TOOLBOX & EDITOR (Bên trái) ---
+with col_tools:
+    with st.container(border=True):
+        st.subheader("Toolbox")
+        name = st.text_input("Tên công đoạn", "Công đoạn A")
+        t = st.number_input("Thời gian xử lý (s)", 1, 3600, 10)
         
-        if st.button("Thêm vào sơ đồ"):
-            st.session_state.processes[new_id] = {
-                'name': new_name, 'time': new_time, 'next': new_next, 'wip': 0
-            }
+        if st.button("➕ Thêm Block vào Canvas", use_container_width=True):
+            new_id = f"node_{uuid.uuid4().hex[:4]}"
+            # Tạo node mới với handle cả 2 bên để nối
+            new_node = StreamlitFlowNode(new_id, (400, 200), {'content': f"{name}\n({t}s)"}, 'default', 'right', 'left')
+            st.session_state.nodes.append(new_node)
             st.rerun()
 
-    if st.button("🗑️ Làm mới sơ đồ"):
-        st.session_state.processes = {
-            'input': {'name': 'Đầu vào', 'time': 0, 'next': 'output', 'wip': 0},
-            'output': {'name': 'Đầu ra', 'time': 0, 'next': None, 'wip': 0}
-        }
-        st.rerun()
+    with st.container(border=True):
+        st.subheader("Mô phỏng")
+        sim_time = st.slider("Thời gian chạy (phút)", 1, 60, 10)
+        if st.button("▶️ Chạy mô phỏng", type="primary", use_container_width=True):
+            st.warning("Tính năng mô phỏng đang tính toán dựa trên các kết nối...")
 
-# --- KHU VỰC HIỂN THỊ SƠ ĐỒ ---
-st.subheader("📍 Dòng chảy hiện tại")
-cols = st.columns(len(st.session_state.processes))
+# --- CANVAS (Chính giữa) ---
+with col_canvas:
+    st.info("💡 Kéo từ dấu chấm của Block này sang Block kia để tạo luồng sản xuất.")
+    
+    # Hiển thị Canvas kéo thả
+    result = StreamlitFlow(
+        key='workflow_canvas',
+        nodes=st.session_state.nodes,
+        edges=st.session_state.edges,
+        enable_node_menu=True,
+        enable_edge_menu=True,
+        enable_pan_zoom=True,
+        height=600
+    )
 
-# Vẽ sơ đồ bằng Markdown & CSS đơn giản để không bao giờ lỗi
-flow_md = " -> ".join([f"**[{p['name']}]**" for p in st.session_state.processes.values()])
-st.markdown(f"**Hướng dòng chảy:** {flow_md}")
+    # Cập nhật thay đổi từ người dùng (kéo thả, nối dây)
+    if result:
+        st.session_state.nodes = result.nodes
+        st.session_state.edges = result.edges
 
-for i, (p_id, p_data) in enumerate(st.session_state.processes.items()):
-    with cols[i]:
-        st.info(f"**{p_data['name']}**")
-        st.write(f"⏱️ {p_data['time']}s")
-        st.write(f"🔴 WIP: {p_data['wip']}")
-        
-        if st.button(f"Xong {p_id}", key=f"btn_{p_id}"):
-            if p_id == 'input':
-                st.session_state.processes[p_id]['wip'] += 1
-            elif st.session_state.processes[p_id]['wip'] > 0:
-                st.session_state.processes[p_id]['wip'] -= 1
-                next_p = p_data['next']
-                if next_p in st.session_state.processes:
-                    st.session_state.processes[next_p]['wip'] += 1
-                if p_id == 'output':
-                    st.session_state.total_out += 1
-
-st.divider()
-st.metric("Tổng sản phẩm hoàn thành", st.session_state.total_out)
+# --- KẾT QUẢ ---
+with st.expander("📊 Chi tiết cấu trúc quy trình"):
+    st.write(f"Số lượng công đoạn: {len(st.session_state.nodes)}")
+    st.write(f"Số lượng kết nối: {len(st.session_state.edges)}")
